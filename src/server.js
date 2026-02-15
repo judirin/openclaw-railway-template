@@ -43,6 +43,12 @@ const WORKSPACE_DIR =
 // Protect /setup with a user-provided password.
 const SETUP_PASSWORD = process.env.SETUP_PASSWORD?.trim();
 
+// Optional: protect the public dashboard (/ and everything proxied to the gateway) with HTTP Basic Auth.
+// This prevents drive-by access even if someone discovers the Railway public URL.
+const WEB_PASSWORD =
+  process.env.OPENCLAW_WEB_PASSWORD?.trim() ||
+  process.env.OPENCLAW_HTTP_PASSWORD?.trim();
+
 // Gateway admin token (protects OpenClaw gateway + Control UI).
 // Must be stable across restarts. If not provided via env, persist it in the state dir.
 function resolveGatewayToken() {
@@ -269,6 +275,19 @@ async function restartGateway() {
     gatewayProc = null;
   }
   return ensureGatewayRunning();
+}
+
+function basicAuthPassword(header) {
+  const h = String(header || "");
+  const [scheme, encoded] = h.split(" ");
+  if (scheme !== "Basic" || !encoded) return null;
+  try {
+    const decoded = Buffer.from(encoded, "base64").toString("utf8");
+    const idx = decoded.indexOf(":");
+    return idx >= 0 ? decoded.slice(idx + 1) : "";
+  } catch {
+    return null;
+  }
 }
 
 function requireSetupAuth(req, res, next) {
@@ -1324,6 +1343,14 @@ app.use(async (req, res) => {
   }
 
   if (isConfigured()) {
+    if (WEB_PASSWORD && !req.path.startsWith("/setup")) {
+      const provided = basicAuthPassword(req.headers.authorization);
+      if (provided !== WEB_PASSWORD) {
+        res.setHeader("WWW-Authenticate", 'Basic realm="OpenClaw"');
+        return res.status(401).type("text/plain").send("Unauthorized");
+      }
+    }
+
     try {
       await ensureGatewayRunning();
     } catch (err) {
@@ -1348,11 +1375,15 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   console.log(`[wrapper] workspace dir: ${WORKSPACE_DIR}`);
 
   // Harden state dir for OpenClaw and avoid missing credentials dir on fresh volumes.
+  const credsDir = path.join(STATE_DIR, "credentials");
   try {
-    fs.mkdirSync(path.join(STATE_DIR, "credentials"), { recursive: true });
+    fs.mkdirSync(credsDir, { recursive: true });
   } catch {}
   try {
     fs.chmodSync(STATE_DIR, 0o700);
+  } catch {}
+  try {
+    fs.chmodSync(credsDir, 0o700);
   } catch {}
 
   console.log(`[wrapper] gateway token: ${OPENCLAW_GATEWAY_TOKEN ? "(set)" : "(missing)"}`);
@@ -1378,6 +1409,21 @@ server.on("upgrade", async (req, socket, head) => {
   if (!isConfigured()) {
     socket.destroy();
     return;
+  }
+  if (WEB_PASSWORD) {
+    const provided = basicAuthPassword(req.headers.authorization);
+    if (provided !== WEB_PASSWORD) {
+      try {
+        socket.write(
+          "HTTP/1.1 401 Unauthorized\r\n" +
+            'WWW-Authenticate: Basic realm="OpenClaw"\r\n' +
+            "Connection: close\r\n" +
+            "\r\n"
+        );
+      } catch {}
+      socket.destroy();
+      return;
+    }
   }
   try {
     await ensureGatewayRunning();

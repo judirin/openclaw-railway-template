@@ -14,6 +14,7 @@ This repo packages **OpenClaw** for Railway with a small **/setup** web wizard s
 
 - The container runs a wrapper web server.
 - The wrapper protects `/setup` with `SETUP_PASSWORD`.
+- Optionally, the wrapper protects the public OpenClaw dashboard (`/` and everything proxied to the gateway) with HTTP Basic Auth via `OPENCLAW_WEB_PASSWORD`.
 - During setup, the wrapper runs `openclaw onboard --non-interactive ...` inside the container, writes state to the volume, and then starts the gateway.
 - After setup, **`/` is OpenClaw**. The wrapper reverse-proxies all traffic (including WebSockets) to the local gateway process.
 
@@ -34,6 +35,7 @@ Recommended:
 
 Optional:
 - `OPENCLAW_GATEWAY_TOKEN` — if not set, the wrapper generates one (not ideal). In a template, set it using a generated secret.
+- `OPENCLAW_WEB_PASSWORD` — if set, requires HTTP Basic Auth for `/` and all proxied gateway routes (the OpenClaw dashboard/API). Any username works; the password must match. (alias: `OPENCLAW_HTTP_PASSWORD`)
 
 Notes:
 - This template pins OpenClaw to a released version by default via Docker build arg `OPENCLAW_GIT_REF` (override if you want `main`).
@@ -118,6 +120,7 @@ docker build -t openclaw-railway-template .
 docker run --rm -p 8080:8080 \
   -e PORT=8080 \
   -e SETUP_PASSWORD=test \
+  -e OPENCLAW_WEB_PASSWORD=webpass \
   -e OPENCLAW_STATE_DIR=/data/.openclaw \
   -e OPENCLAW_WORKSPACE_DIR=/data/workspace \
   -v $(pwd)/.tmpdata:/data \
