@@ -548,14 +548,16 @@ const AUTH_GROUPS = [
   { value: "ai-gateway", label: "Vercel AI Gateway", hint: "API key", options: [
     { value: "ai-gateway-api-key", label: "Vercel AI Gateway API key" }
   ]},
-  { value: "moonshot", label: "Moonshot AI", hint: "Kimi K2 + Kimi Code", options: [
-    { value: "moonshot-api-key", label: "Moonshot AI API key" },
-    { value: "kimi-code-api-key", label: "Kimi Code API key" }
+  { value: "moonshot", label: "Moonshot AI (Kimi K2.5)", hint: "Kimi K2.5 + Kimi Coding", options: [
+    { value: "moonshot-api-key", label: "Kimi K2.5 API key (.ai)" },
+    { value: "moonshot-api-key-cn", label: "Kimi K2.5 API key (.cn)" },
+    { value: "kimi-code-api-key", label: "Kimi Code API key (subscription)" }
   ]},
   { value: "zai", label: "Z.AI (GLM 4.7)", hint: "API key", options: [
     { value: "zai-api-key", label: "Z.AI (GLM 4.7) API key" }
   ]},
-  { value: "minimax", label: "MiniMax", hint: "M2.1 (recommended)", options: [
+  { value: "minimax", label: "MiniMax", hint: "M2.5 (alias) + M2.1", options: [
+    { value: "minimax-api-m2-5", label: "MiniMax M2.5 (alias to MiniMax API)" },
     { value: "minimax-api", label: "MiniMax M2.1" },
     { value: "minimax-api-lightning", label: "MiniMax M2.1 Lightning" }
   ]},
@@ -615,7 +617,12 @@ function buildOnboardArgs(payload) {
   ];
 
   if (payload.authChoice) {
-    args.push("--auth-choice", payload.authChoice);
+    const authChoiceAliases = {
+      // UI aliases that should map to auth choices accepted by openclaw onboard.
+      "minimax-api-m2-5": "minimax-api",
+    };
+    const normalizedAuthChoice = authChoiceAliases[payload.authChoice] || payload.authChoice;
+    args.push("--auth-choice", normalizedAuthChoice);
 
     // Map secret to correct flag for common choices.
     const secret = (payload.authSecret || "").trim();
@@ -625,6 +632,7 @@ function buildOnboardArgs(payload) {
       "openrouter-api-key": "--openrouter-api-key",
       "ai-gateway-api-key": "--ai-gateway-api-key",
       "moonshot-api-key": "--moonshot-api-key",
+      "moonshot-api-key-cn": "--moonshot-api-key",
       "kimi-code-api-key": "--kimi-code-api-key",
       "gemini-api-key": "--gemini-api-key",
       "zai-api-key": "--zai-api-key",
@@ -634,7 +642,7 @@ function buildOnboardArgs(payload) {
       "opencode-zen": "--opencode-zen-api-key",
     };
 
-    const flag = map[payload.authChoice];
+    const flag = map[normalizedAuthChoice];
 
     // If the user picked an API-key auth choice but didn't provide a secret, fail fast.
     // Otherwise OpenClaw may fall back to its default auth choice, which looks like the
@@ -647,7 +655,7 @@ function buildOnboardArgs(payload) {
       args.push(flag, secret);
     }
 
-    if (payload.authChoice === "token") {
+    if (normalizedAuthChoice === "token") {
       // This is the Anthropic setup-token flow.
       if (!secret) throw new Error("Missing auth secret for authChoice=token");
       args.push("--token-provider", "anthropic", "--token", secret);
