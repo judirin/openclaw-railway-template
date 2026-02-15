@@ -955,6 +955,10 @@ function extractDeviceRequestIds(text) {
 
   for (const m of s.matchAll(/requestId\s*(?:=|:)\s*([A-Za-z0-9_-]{6,})/g)) out.add(m[1]);
   for (const m of s.matchAll(/"requestId"\s*:\s*"([A-Za-z0-9_-]{6,})"/g)) out.add(m[1]);
+  // `openclaw devices list` prints pending request IDs as UUIDs in a table.
+  for (const m of s.matchAll(/\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/g)) {
+    out.add(m[0]);
+  }
 
   return Array.from(out);
 }
